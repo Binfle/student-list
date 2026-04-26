@@ -1,195 +1,390 @@
-# student-list 
-This repo is a simple application to list student with a webserver (PHP) and API (Flask)
+#  POZOS — Student List
 
-![project](https://user-images.githubusercontent.com/18481009/84582395-ba230b00-adeb-11ea-9453-22ed1be7e268.jpg)
+> POC Docker pour l'application `student_list` de POZOS — déploiement découplé, scalable et automatisé via Docker et Docker Compose, avec mise en place d'un registry privé.
 
+---
 
-------------
+## 📋 Table des matières
 
+- [Contexte](#-contexte)
+- [Architecture](#-architecture)
+- [Prérequis](#-prérequis)
+- [Structure du projet](#-structure-du-projet)
+- [Déploiement](#-déploiement)
+  - [1. Application (API + Website)](#1-application-api--website)
+  - [2. Registry privé](#2-registry-privé)
+  - [3. Push de l'image sur le registry](#3-push-de-limage-sur-le-registry)
+- [Choix techniques](#-choix-techniques)
+- [Problèmes rencontrés](#-problèmes-rencontrés)
+- [Nettoyage](#-nettoyage)
 
-## Objectives
+---
 
-The objectives of this practice exam are to ensure that you are able to manage a docker infrastructure, so you will be evaluated about the following
+##  Contexte
 
-### Themes:
+POZOS est une entreprise IT française qui développe des logiciels pour les lycées. L'application `student_list` permet d'afficher la liste des élèves avec leur âge.
 
-- improve an existed application deployment process
-- versioning your infrastructure release
-- address best practice when implementing docker infrastructure
-- Infrastructure As Code
+L'objectif de ce POC est de **dockeriser** l'application existante pour la rendre :
+- **Scalable** — chaque module est indépendant et peut être redéployé ou répliqué isolément
+- **Facilement déployable** — un seul `docker compose up -d` suffit à lancer toute la stack
+- **Versionnable** — les images sont stockées dans un registry privé pour assurer la traçabilité des versions
 
-## Context
+L'application est composée de **deux modules découplés** :
+- Une **API REST** en Python/Flask avec authentification basique
+- Un **frontend web** en PHP qui consomme l'API
 
+Une **infrastructure de stockage d'images** (registry privé) complète le dispositif pour répondre aux besoins de versionnement des releases.
 
-*POZOS*  is an IT company located in France and develops software for High School.
+---
 
-The innovation department want to disrupt the existing infrastructure to ensure that
+##  Architecture
 
-it can be scalable, easily deployed with a maximum of automation.
-
-POZOS wants you to build a "**POC**" to show how docker can help you and how much this technology is efficient.
-
-For this POC, POZOS will give you an application and want you to build a "decouple" infrastructure based on "**Docker**".
-
-Currently, the application is running on a single server with any scalability and any high availability.
-
-When POZOS needs to deploy a new release, every time some goes wrong.
-
-In conclusion, POZOS needs agility on its software farm.
-
-## Infrastructure
-
-For this POC, you will only use one single machine with a docker installed on it.
-
-The build and the deployment will be made on this machine.
-
-POZOS recommends you to use ubuntu OS because it's the most used in the company.
-
-Please also note that you are authorized to use a virtual machine base on Centos7.6 and not your physical machine.
-
-The security is a very critical aspect of POZOS DSI so please do not disable the firewall or other security mechanisms otherwise please explain your reasons in your delivery.
-
-## Application
-
-
-The application that you will be working on is named "*student_list*", this application is very basic and enables POZOS to show the list of the student with their age.
-
-student_list has two modules:
-
-- the first module is a REST API (with basic authentication needed) who send the desire list of the student based on JSON file
-- The second module is a web app written in HTML + PHP who enable end-user to get a list of students
-
-Your work is to build one container for each module an make them interact with each other
-
-Application source code can be found [here](https://github.com/diranetafen/student-list.git "here")
-
-The files that you must provide (in your delivery) are ***Dockerfile*** and ***docker-compose.yml***  (currently both are empty)
-
-Now it is time to explain you each file's role:
-
-- docker-compose.yml: to launch the application (API and web app)
-- Dockerfile: the file that will be used to build the API image (details will be given)
-- requirements.txt: contains all the packages to be installed to run the application
-- student_age.json: contain student name with age on JSON format
-- student_age.py: contains the source code of the API in python
-- index.php: PHP  page where end-user will be connected to interact with the service to - list students with age. You need to update the following line before running the website container to make ***api_ip_or_name*** and ***port*** fit your deployment
-
-```bash 
- $url = 'http://<api_ip_or_name:port>/pozos/api/v1.0/get_student_ages';
- ```
-
-
-
-## Build and test (7 points)
-
-POZOS will give you information to build the API container
-
-- Base image
-
-To build API image you must use "python:3.13-slim"
-
-- Maintainer
-
-Please don't forget to specify the maintainer information
-
-- Add the source code
-
-You need to copy the source code of the API in the container at the root "/" path
-
-- Prerequisite
-
-The API is using FLASK engine,  you need to install some package 
-```bash
-apt update -y && apt install python-dev python3-dev libsasl2-dev python-dev libldap2-dev libssl-dev -y
 ```
-Copy the requirements.txt file into the container in the root "/" directory to install the packages needed to start up our application
+┌──────────────────────────────────────────────┐
+│           Stack applicative                  │
+│        Réseau: pozos_network                 │
+│                                              │
+│   ┌──────────────┐         ┌──────────────┐  │
+│   │   website    │ ──────> │     api      │  │
+│   │  (php:apache)│         │ (Flask 3.x)  │  │
+│   │   port 80    │         │   port 5000  │  │
+│   └──────────────┘         └──────────────┘  │
+│         │                         │          │
+└─────────┼─────────────────────────┼──────────┘
+          │                         │
+       8080:80                  5000:5000
+          │                         │
+   ┌──────┴────┐            ┌───────┴───┐
+   │  Browser  │            │   curl    │
+   └───────────┘            └───────────┘
 
-to launch the installation, use this command
+
+┌──────────────────────────────────────────────┐
+│        Stack registry (séparé)               │
+│      Réseau: registry_network                │
+│                                              │
+│   ┌──────────────┐         ┌──────────────┐  │
+│   │  registry-ui │ ──────> │   registry   │  │
+│   │   (Joxit)    │         │  (registry:2)│  │
+│   │   port 80    │         │   port 5000  │  │
+│   └──────────────┘         └──────────────┘  │
+└──────────────────────────────────────────────┘
+       8085:80                   5050:5000
+```
+
+Les deux stacks sont **volontairement séparés** : le registry relève de l'infrastructure et a un cycle de vie indépendant de l'application.
+
+---
+
+## Prérequis
+
+- **Docker Engine** ≥ 20.x
+- **Docker Compose** v2 (commande `docker compose` avec espace, le plugin intégré au CLI Docker)
+- **Git**
+- Ports libres sur la machine hôte : `5000`, `8080`, `5050`, `8085`
+
+Vérification rapide :
 
 ```bash
-pip3 install -r /requirements.txt
-```
-- Persistent data (volume)
-
-Create data folder at the root "/" where data will be stored and declare it as a volume
-
-You will use this folder to mount student list
-
-- API Port
-
-To interact with this API expose 5000 port
-
-- CMD
-
-When container start, it must run the student_age.py (copied at step 4), so it should be something like
-```bash 
-CMD [ "python3", "./student_age.py" ]
+docker --version
+docker compose version
 ```
 
-Build your image and try to run it (don't forget to mount *student_age.json* file at */data/student_age.json* in the container), check logs and verify that the container is listening and is  ready to answer
+---
 
-Run this command to make sure that the API correctly responding (take a screenshot for delivery purpose)
-NB: Start your container using this specific port to reach it
-Port: 5000
-```bash 
-curl -u toto:python -X GET http://<host IP>:<API exposed port>/pozos/api/v1.0/get_student_ages
+## Structure du projet
+
+```
+student-list/
+├── README.md                       ← ce fichier
+├── docker-compose.yml              ← stack applicative (API + Website)
+├── simple_api/
+│   ├── Dockerfile                  ← build de l'image API
+│   ├── student_age.py              ← code Flask
+│   ├── student_age.json            ← données (montées en volume)
+│   └── requirements.txt            ← dépendances Python
+├── website/
+│   └── index.php                   ← frontend (URL de l'API à configurer)
+├── registry/
+│   └── docker-compose.yml          ← stack registry privé
+└── screenshots/                    ← captures d'écran du livrable
 ```
 
-**Congratulation! Now you are ready for the next step (docker-compose.yml)**
+---
 
-## Infrastructure As Code (5 points)
+## Déploiement
 
-After testing your API image, you need to put all together and deploy it, using docker-compose.
+### Cloner le repo
 
-The ***docker-compose.yml*** file will deploy two services :
+```bash
+git clone https://github.com/Binfl/student-list.git
+cd student-list
+```
 
-- website: the end-user interface with the following characteristics
-   - image: php:apache
-   - environment: you will provide the USERNAME and PASSWORD to enable the web app to access the API through authentication
-   - volumes: to avoid php:apache image run with the default website, we will bind the website given by POZOS to use. You must have something like
-`./website:/var/www/html`
-   - depend on: you need to make sure that the API will start first before the website
-   - port: do not forget to expose the port
-- API: the image builded before should be used with the following specification
-   - image: the name of the image builded previously
-   - volumes: You will mount student_age.json file in /data/student_age.json
-   - port: don't forget to expose the port
-   - networks: don't forget to add specific network for your project
+---
 
-Delete your previous created container
+### 1. Application (API + Website)
 
-Run your docker-compose.yml
+#### Build de l'image API et lancement du stack
 
-Finally, reach your website and click on the bouton "List Student"
+Depuis la racine du projet :
 
-**If the list of the student appears, you are successfully dockerizing the POZOS application! Congratulation (make a screenshot)**
+```bash
+docker compose up -d
+```
 
-## Docker Registry (4 points)
+Au premier lancement, Docker va builder l'image `student-list-api:v1` à partir du `Dockerfile` situé dans `simple_api/`. Cela prend 1 à 2 minutes (téléchargement de `python:3.13-slim`, installation des paquets système et Python).
 
-POZOS need you to deploy a private registry and store the built images
+Vérifier que les deux services sont `Up` :
 
-So you need to deploy :
+```bash
+docker compose ps
+```
 
-- a docker [registry](https://docs.docker.com/registry/ "registry")
-- a web [interface](https://hub.docker.com/r/joxit/docker-registry-ui/ "interface") to see the pushed image as a container
+📸 **Capture : les deux conteneurs `student-list_api` et `student-list_web` actifs**
 
-Or you can use [Portus](http://port.us.org/ "Portus") to run both
+> _Insérer ici la capture de `docker compose ps` montrant les deux services Up._
 
-Don't forget to push your image on your private registry and show them in your delivery.
+#### Test de l'API en isolation
 
-## Delivery (4 points)
+```bash
+curl -u toto:python -X GET http://localhost:5000/pozos/api/v1.0/get_student_ages
+```
 
-Your delivery must be link of your repository with your name that contain:
-- A README file with your screenshots and explanations.
-- Configuration files used to realize the graded exercise (docker-compose.yml and Dockerfile).
+Réponse attendue :
 
-Your delivery will be evaluated on:
+```json
+{
+  "student_ages": {
+    "alice": "12",
+    "bob": "13"
+  }
+}
+```
 
-- Explanations quality
-- Screenshots quality (relevance, visibility)
-- Presentation quality
-- The structure of your github repository
+Le `-u toto:python` envoie l'authentification basique configurée dans `student_age.py`.
 
-Send your delivery at ***contact@eazytraining.fr*** and we will provide you the link of the solution.
+#### Test du frontend
 
-![good luck](https://user-images.githubusercontent.com/18481009/84582398-cad38100-adeb-11ea-95e3-2a9d4c0d5437.gif)
+Ouvrir un navigateur sur :
+
+```
+http://localhost:8080
+```
+
+Cliquer sur le bouton **"List Student"** — la liste des élèves doit apparaître.
+
+À ce stade, l'application complète tourne en conteneurs avec :
+- Communication inter-services via le réseau Docker `pozos_network`
+- Données externalisées (`student_age.json`) montées en volume
+- Frontend découplé du backend
+
+---
+
+### 2. Registry privé
+
+Le registry est dans un **stack séparé**. Voir [Choix techniques](#-choix-techniques) pour la justification.
+
+```bash
+cd registry
+docker compose up -d
+docker compose ps
+```
+
+L'UI web est accessible sur :
+
+```
+http://localhost:8085
+```
+
+Au premier démarrage, l'UI affichera "0 repository" car aucune image n'a encore été poussée.
+
+---
+
+### 3. Push de l'image sur le registry
+
+Depuis la racine du projet (revenir d'abord avec `cd ..`) :
+
+#### Tagger l'image pour le registry local
+
+```bash
+docker tag student-list-api:v1 localhost:5050/student-list-api:v1
+```
+
+Vérification :
+
+```bash
+docker images | grep student-list-api
+```
+
+Les deux entrées doivent partager le même `IMAGE ID` (c'est la même image avec deux noms).
+
+#### Pousser l'image
+
+```bash
+docker push localhost:5050/student-list-api:v1
+```
+
+Sortie attendue :
+
+```
+The push refers to repository [localhost:5050/student-list-api]
+abc123: Pushed
+def456: Pushed
+v1: digest: sha256:... size: ...
+```
+
+#### Visualiser dans l'UI
+
+Rafraîchir `http://localhost:8085` — l'image `student-list-api:v1` apparaît dans la liste, avec sa taille, son architecture (`amd64`), et la date du push.
+
+#### Vérification via l'API du registry
+
+Optionnel, mais utile pour valider le bon fonctionnement :
+
+```bash
+# Lister les repositories
+curl http://localhost:5050/v2/_catalog
+
+# Lister les tags d'un repository
+curl http://localhost:5050/v2/student-list-api/tags/list
+```
+
+Sortie attendue :
+
+```json
+{"repositories":["student-list-api"]}
+{"name":"student-list-api","tags":["v1"]}
+```
+
+---
+
+## Choix techniques
+
+### Image de base `python:3.13-slim` pour l'API
+
+Imposée par l'énoncé. La variante "slim" réduit significativement la taille de l'image finale (~150 Mo au lieu de ~900 Mo pour la full), au prix d'un environnement plus minimaliste qui nécessite d'installer manuellement quelques outils (voir le point sur `build-essential`).
+
+### Installation de `build-essential` dans le Dockerfile
+
+Le paquet Python `python-ldap` (dépendance transitive de `flask-simpleldap`) contient du code C qui doit être compilé à l'installation. L'image `python:3.13-slim` ne fournit pas de compilateur, d'où l'ajout de `build-essential` (qui inclut `gcc`, `make`, et les headers C standards) dans la liste apt-get.
+
+### `php:apache` plutôt que `httpd:2.4` pour le website
+
+L'image `httpd:2.4` n'inclut **pas le module PHP** — un fichier `.php` serait servi en texte brut au navigateur. `php:apache` intègre PHP et Apache déjà configurés ensemble, prêts à l'emploi pour des sites PHP simples.
+
+### Bind mount sur `./website:/var/www/html`
+
+Plutôt que de builder une image custom pour le frontend, on injecte simplement le code PHP dans l'image officielle via un bind mount. Avantages :
+- Pas de Dockerfile à maintenir pour le frontend
+- Modifications de `index.php` prises en compte sans rebuild
+- Image officielle régulièrement maintenue par les équipes PHP
+
+### Combinaison `build:` + `image:` dans le compose applicatif
+
+```yaml
+api:
+  build:
+    context: ./simple_api
+  image: student-list-api:v1
+```
+
+- `build:` permet de reproduire l'environnement avec un seul `docker compose up -d`
+- `image:` nomme correctement l'image générée pour pouvoir ensuite la tagger et la pousser sur le registry privé
+
+### Réseau dédié `pozos_network`
+
+Isolation explicite : seuls les services attachés à ce réseau peuvent communiquer entre eux. Évite l'utilisation du réseau `default` créé implicitement par Compose, qui est moins explicite à la lecture.
+
+### Registry dans un stack séparé
+
+Le registry est de l'**infrastructure**, pas de l'**applicatif**. En production typique :
+- 1 registry centralisé sur une machine dédiée
+- N applications le consomment
+
+Coupler les deux dans un seul compose mélangerait deux préoccupations distinctes. La séparation permet de redéployer l'application sans toucher au registry, et inversement.
+
+### Ports `5050` et `8085` pour le registry
+
+Pour éviter les conflits avec le stack applicatif qui utilise déjà `5000` (API) et `8080` (website). La communication interne entre `registry-ui` et `registry` reste sur le port 5000 du conteneur — seul le mapping côté hôte change.
+
+### `REGISTRY_STORAGE_DELETE_ENABLED` et `DELETE_IMAGES`
+
+Activés pour permettre la suppression d'images via l'UI Joxit. Pratique pour nettoyer les anciennes versions et garder le registry propre.
+
+### Volume nommé `registry_data`
+
+Les images poussées sur le registry sont stockées dans `/var/lib/registry` à l'intérieur du conteneur. Sans volume, un `docker compose down` ferait perdre toutes les images. Le volume nommé garantit la persistance entre redémarrages.
+
+---
+
+## Problèmes rencontrés
+
+### 1. Compilation de `python-ldap` qui échoue au build
+
+**Symptôme** :
+
+```
+error: command 'gcc' failed: No such file or directory
+ERROR: Failed building wheel for python-ldap
+```
+
+**Cause** : `python:3.13-slim` ne contient pas de compilateur C, mais `python-ldap` doit compiler du code C natif au moment de l'installation `pip`.
+
+**Solution** : ajouter `build-essential` aux paquets installés via `apt-get` dans le Dockerfile, ainsi que les headers de développement nécessaires (`python3-dev`, `libsasl2-dev`, `libldap2-dev`, `libssl-dev`).
+
+### 2. Versions des dépendances Python incompatibles avec Python 3.13
+
+**Symptôme** : Le `requirements.txt` initial pointait vers `flask==2.0.0` et `Werkzeug==2.0.0` — versions trop anciennes pour fonctionner avec Python 3.13 (erreurs d'import sur des modules de la stdlib supprimés depuis).
+
+**Solution** : monter les versions à `flask>=3.0`, `Werkzeug>=3.0`, `python-dotenv>=1.0`, `flask-httpauth>=4.8` pour rester compatible avec Python 3.13.
+
+### 3. Conflit de ports entre le stack app et le stack registry
+
+**Symptôme** :
+
+```
+Error: bind: address already in use
+```
+
+**Cause** : Les deux composes utilisaient initialement les mêmes ports (`5000` et `8080`).
+
+**Solution** : déplacer le registry sur le port `5050` et son UI sur `8085`. La variable `NGINX_PROXY_PASS_URL` reste en `http://registry:5000` car la communication interne se fait sur le port du conteneur, pas celui de l'hôte.
+
+### 4. Conteneur API en statut `Created` sans démarrer
+
+**Symptôme** : `docker compose ps` montrait l'API en `Created` au lieu de `Up`, sans message d'erreur visible immédiatement.
+
+**Cause** : un précédent test avec `docker run -p 80:80` avait gardé un conteneur réservant le port. Au build suivant, le bind échouait silencieusement avec un statut `Created`.
+
+**Solution** : `docker inspect <container> --format '{{.State.Error}}'` a révélé l'erreur `bind: address already in use`. Suppression du conteneur orphelin avec `docker rm -f <container>` puis redémarrage propre.
+
+---
+
+##  Nettoyage
+
+Pour arrêter et supprimer toute l'infrastructure :
+
+```bash
+# Stack applicatif
+cd student-list
+docker compose down
+
+# Stack registry (avec suppression du volume = perte des images poussées)
+cd registry
+docker compose down -v
+```
+
+Pour supprimer aussi les images locales :
+
+```bash
+docker rmi student-list-api:v1 localhost:5050/student-list-api:v1
+```
+
+---
+
+## 📜 Licence et crédits
+
+POC réalisé dans le cadre d'un examen pratique Docker — formation **Eazytraining@UDEMY**.
+
+Application `student_list` fournie par POZOS.

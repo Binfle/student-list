@@ -1,0 +1,35 @@
+name: student-list
+
+services:
+  api:
+    build:
+      context: ./simple_api
+      dockerfile: Dockerfile
+    image: student-list-api:v1
+    container_name: student-list_api
+    ports:
+      - "5000:5000"
+    volumes:
+      - ./simple_api/student_age.json:/data/student_age.json
+    restart: unless-stopped
+    networks:
+      - pozos_network
+
+  website:
+    image: php:apache
+    container_name: student-list_web
+    ports:
+      - "8080:80"
+    environment:
+      - USERNAME=toto
+      - PASSWORD=python
+    volumes:
+      - ./website:/var/www/html
+    depends_on:
+      - api
+    restart: unless-stopped
+    networks:
+      - pozos_network
+
+networks:
+  pozos_network:
