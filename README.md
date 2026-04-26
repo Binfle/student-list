@@ -144,6 +144,7 @@ docker compose ps
 📸 **Capture : les deux conteneurs `student-list_api` et `student-list_web` actifs**
 
 > _Insérer ici la capture de `docker compose ps` montrant les deux services Up._
+https://media.discordapp.net/attachments/878026931025608734/1498010880451809300/image.png?ex=69ef9ad9&is=69ee4959&hm=75c4a5d2053f9dd0dead20eae7d520b9a9a251fbd63c036d832bcb6c78cf589a&=&format=webp&quality=lossless
 
 #### Test de l'API en isolation
 
