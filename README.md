@@ -141,9 +141,8 @@ Vérifier que les deux services sont `Up` :
 docker compose ps
 ```
 
-📸 **Capture : les deux conteneurs `student-list_api` et `student-list_web` actifs**
+**Capture : les deux conteneurs `student-list_api` et `student-list_web` actifs**
 
-> _Insérer ici la capture de `docker compose ps` montrant les deux services Up._
 ![test1](https://media.discordapp.net/attachments/878026931025608734/1498010880451809300/image.png?ex=69ef9ad9&is=69ee4959&hm=75c4a5d2053f9dd0dead20eae7d520b9a9a251fbd63c036d832bcb6c78cf589a&=&format=webp&quality=lossless)
 
 #### Test de l'API en isolation
@@ -165,6 +164,10 @@ Réponse attendue :
 
 Le `-u toto:python` envoie l'authentification basique configurée dans `student_age.py`.
 
+📸 **Capture : test curl de l'API renvoyant le JSON**
+
+![test4](https://media.discordapp.net/attachments/878026931025608734/1498014141594734702/image.png?ex=69ef9de3&is=69ee4c63&hm=f6c677213b5797452a476f71ce9e52600a8b67ecf3025f999eb65407d723433e&=&format=webp&quality=lossless)
+
 #### Test du frontend
 
 Ouvrir un navigateur sur :
@@ -174,6 +177,12 @@ http://localhost:8080
 ```
 
 Cliquer sur le bouton **"List Student"** — la liste des élèves doit apparaître.
+
+📸 **Capture : page POZOS avec la liste affichée (alice 12, bob 13)**
+
+![test2](https://media.discordapp.net/attachments/878026931025608734/1497998356125974578/scree_docker_livrable_2.png?ex=69ef8f2f&is=69ee3daf&hm=ab076e385d880cc08d61e7a3101b3d9d4fc38de8d2a7064f405b97f5d3dc34d2&=&format=webp&quality=lossless)
+
+
 
 À ce stade, l'application complète tourne en conteneurs avec :
 - Communication inter-services via le réseau Docker `pozos_network`
@@ -191,6 +200,10 @@ cd registry
 docker compose up -d
 docker compose ps
 ```
+
+📸 **Capture : `registry` et `registry-ui` actifs**
+
+![test5](https://media.discordapp.net/attachments/878026931025608734/1498010743302521064/image.png?ex=69ef9ab8&is=69ee4938&hm=262cc5dec7299963b6bb197ccce20cd6ee915b76f6b2b2ae0940fd9e578d6645&=&format=webp&quality=lossless)
 
 L'UI web est accessible sur :
 
@@ -235,9 +248,11 @@ def456: Pushed
 v1: digest: sha256:... size: ...
 ```
 
-#### Visualiser dans l'UI
-
 Rafraîchir `http://localhost:8085` — l'image `student-list-api:v1` apparaît dans la liste, avec sa taille, son architecture (`amd64`), et la date du push.
+
+📸 **Capture : UI Joxit affichant l'image `student-list-api:v1`**
+
+![test6](https://media.discordapp.net/attachments/878026931025608734/1498007445354578110/image.png?ex=69ef97a6&is=69ee4626&hm=f082121bbe309a407a34681848ad3035842cdd5668a3128b46eb8e2623137de6&=&format=webp&quality=lossless)
 
 #### Vérification via l'API du registry
 
@@ -258,9 +273,13 @@ Sortie attendue :
 {"name":"student-list-api","tags":["v1"]}
 ```
 
+📸 **Capture (optionnelle) : sortie des appels curl à l'API du registry**
+
+> _Insérer ici la capture (facultative)._
+
 ---
 
-## Choix techniques
+## 🛠️ Choix techniques
 
 ### Image de base `python:3.13-slim` pour l'API
 
@@ -319,7 +338,7 @@ Les images poussées sur le registry sont stockées dans `/var/lib/registry` à 
 
 ---
 
-## Problèmes rencontrés
+## 🐛 Problèmes rencontrés
 
 ### 1. Compilation de `python-ldap` qui échoue au build
 
@@ -362,7 +381,7 @@ Error: bind: address already in use
 
 ---
 
-##  Nettoyage
+## 🧹 Nettoyage
 
 Pour arrêter et supprimer toute l'infrastructure :
 
@@ -386,6 +405,6 @@ docker rmi student-list-api:v1 localhost:5050/student-list-api:v1
 
 ## 📜 Licence et crédits
 
-POC réalisé dans le cadre d'un examen pratique Docker — formation **Eazytraining@UDEMY**.
+POC réalisé dans le cadre d'un examen pratique Docker — formation **Eazytraining**.
 
 Application `student_list` fournie par POZOS.
